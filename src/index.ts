@@ -1,16 +1,16 @@
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
-import { itemsRoute } from './routes/items.js'
+import { snackRoute } from './routes/items.js'
 
 const app = new Hono()
 
-app.get('/', (c) => c.json({ message: 'Inventory API berjalan!' }))
+app.get('/', (c) => c.json({ message: 'Toko Snack Arta 🍪' }))
 
-app.route('/items', itemsRoute)
+app.route('/snacks', snackRoute)
 
 serve({
   fetch: app.fetch,
-  port: 3000
+  port: 8000
 }, (info) => {
   console.log(`Server berjalan di http://localhost:${info.port}`)
 })

@@ -1,70 +1,68 @@
 import { Hono } from 'hono'
-import { readDB, writeDB } from '../database.js'
+import { zValidator } from '@hono/zod-validator'
+import { z } from 'zod'
+import prisma from '../database.js'
 
-export const itemsRoute = new Hono()
+export const snackRoute = new Hono()
 
-//Get
-itemsRoute.get('/', (c) => {
-  const items = readDB()
-  return c.json(items)
+// Schema validasi pakai zod
+const snackSchema = z.object({
+  name: z.string().min(1, 'Nama snack tidak boleh kosong'),
+  stock: z.number().min(0, 'Stok tidak boleh negatif'),
+  price: z.number().min(0, 'Harga tidak boleh negatif'),
+  category: z.string().min(1, 'Kategori tidak boleh kosong'),
 })
 
-//If Get Error/not found
-itemsRoute.get('/:id', (c) => {
+//Get - Lihat semua snack
+snackRoute.get('/', async (c) => {
+  const snacks = await prisma.snack.findMany()
+  return c.json(snacks)
+})
+
+//Get - Lihat 1 snack
+snackRoute.get('/:id', async (c) => {
   const id = Number(c.req.param('id'))
-  const items = readDB()
-  const item = items.find((i: any) => i.id === id)
-  if (!item) return c.json({ error: 'Barang tidak ditemukan' }, 404)
-  return c.json(item)
+  const snack = await prisma.snack.findUnique({ where: { id } })
+  if (!snack) return c.json({ error: 'Snack tidak ditemukan' }, 404)
+  return c.json(snack)
 })
 
-//Post/Create
-itemsRoute.post('/', async (c) => {
-  const { name, stock, price } = await c.req.json()
-  const items = readDB()
-  const newItem = {
-    id: items.length + 1,
-    name,
-    stock,
-    price,
-  }
-  items.push(newItem)
-  writeDB(items)
-  return c.json(newItem, 201)
+//Post/Create - Tambah snack baru
+snackRoute.post('/', zValidator('json', snackSchema), async (c) => {
+  const { name, stock, price, category } = c.req.valid('json')
+  const snack = await prisma.snack.create({
+    data: { name, stock, price, category }
+  })
+  return c.json(snack, 201)
 })
 
-//Put/Update
-itemsRoute.put('/:id', async (c) => {
+//Put/Update - Edit snack
+snackRoute.put('/:id', zValidator('json', snackSchema), async (c) => {
   const id = Number(c.req.param('id'))
-  const { name, stock, price } = await c.req.json()
-  const items = readDB()
-  const index = items.findIndex((i: any) => i.id === id)
-  if (index === -1) return c.json({ error: 'Barang tidak ditemukan' }, 404)
-  items[index] = { id, name, stock, price }
-  writeDB(items)
-  return c.json({ message: 'Barang berhasil diupdate' })
+  const { name, stock, price, category } = c.req.valid('json')
+  const snack = await prisma.snack.update({
+    where: { id },
+    data: { name, stock, price, category }
+  })
+  return c.json(snack)
 })
 
-//delete
-itemsRoute.delete('/:id', (c) => {
+//Delete - Hapus snack
+snackRoute.delete('/:id', async (c) => {
   const id = Number(c.req.param('id'))
-  let items = readDB()
-  items = items.filter((i: any) => i.id !== id)
-  writeDB(items)
-  return c.json({ message: 'Barang berhasil dihapus' })
+  await prisma.snack.delete({ where: { id } })
+  return c.json({ message: 'Snack berhasil dihapus' })
 })
 
-//restock
-itemsRoute.post('/:id/restock', async (c) => {
+//Restock untuk menambah stok snack
+snackRoute.patch('/:id/restock', async (c) => {
   const id = Number(c.req.param('id'))
   const { tambah } = await c.req.json()
-  const items = readDB()
-  const index = items.findIndex((i: any) => i.id === id)
-  if (index === -1) return c.json({ error: 'Barang tidak ditemukan' }, 404)
-  items[index].stock += tambah
-  writeDB(items)
-  return c.json({
-    message: 'Stok berhasil ditambah',
-    stok_sekarang: items[index].stock,
+  const snack = await prisma.snack.findUnique({ where: { id } })
+  if (!snack) return c.json({ error: 'Snack tidak ditemukan' }, 404)
+  const updated = await prisma.snack.update({
+    where: { id },
+    data: { stock: snack.stock + tambah }
   })
+  return c.json({ message: 'Stok berhasil ditambah!', stok_sekarang: updated.stock })
 })
